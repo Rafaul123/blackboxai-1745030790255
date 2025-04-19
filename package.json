@@ -1,0 +1,24 @@
+{
+  "name": "network-detector-app",
+  "version": "1.0.0",
+  "description": "Desktop app to detect web and device network activity for compromise detection",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "echo \"Build step can be added here\""
+  },
+  "dependencies": {
+    "electron": "^25.3.1",
+    "pcap": "^2.1.0"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.22.9",
+    "@babel/preset-react": "^7.22.5",
+    "babel-loader": "^9.1.3",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "webpack": "^5.88.2",
+    "webpack-cli": "^5.1.4",
+    "webpack-dev-server": "^4.15.1"
+  }
+}

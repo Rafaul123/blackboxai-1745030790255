@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Network Detector Standalone Web App</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" />
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/recharts/umd/Recharts.min.js"></script>
+</head>
+<body class="bg-gray-50">
+  <div id="root" class="p-4"></div>
+  <script type="text/babel">
+
+const { useState, useEffect } = React;
+const {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+} = Recharts;
+
+const OWASP_ATTACK_SURFACES = {
+  'Injection': ['Unauthorized communication', 'Connection hijacking', 'Reset attack'],
+  'Broken Authentication': ['Possible Man-in-the-Middle (MITM) attack'],
+  'Sensitive Data Exposure': ['Data exfiltration', 'Data gathering', 'Large packet size'],
+  'Security Misconfiguration': ['Firewall breach', 'Unauthorized access', 'Firewall policies'],
+  'Information Disclosure': ['Scanning or reconnaissance activity', 'Very low TTL detected'],
+  'Denial of Service': ['Flooding attack'],
+  'Other': []
+};
+
+function mapDescriptionToOWASP(description) {
+  for (const [category, keywords] of Object.entries(OWASP_ATTACK_SURFACES)) {
+    for (const keyword of keywords) {
+      if (description.includes(keyword)) {
+        return category;
+      }
+    }
+  }
+  return 'Other';
+}
+
+function analyzeNetworkData(dataEntries) {
+  const attackSurfaceCounts = {};
+  const protocolCounts = {};
+
+  for (const entry of dataEntries) {
+    const category = mapDescriptionToOWASP(entry.description);
+    attackSurfaceCounts[category] = (attackSurfaceCounts[category] || 0) + 1;
+
+    const protocol = entry.protocol || 'Unknown';
+    protocolCounts[protocol] = (protocolCounts[protocol] || 0) + 1;
+  }
+
+  return { attackSurfaceCounts, protocolCounts };
+}
+
+function generateRandomPacket() {
+  const protocols = ['TCP', 'UDP', 'ICMP', 'HTTP', 'HTTPS'];
+  const sources = ['Home WiFi', 'Office Network', 'VPN', 'Unknown External 1', 'Unknown External 2'];
+  const destinations = ['Google DNS', 'Cloudflare DNS', 'Unknown External 1', 'Unknown External 2', 'VPN', 'Home WiFi', 'Office Network'];
+  const attackDescriptions = [
+    '',
+    'Possible Man-in-the-Middle (MITM) attack detected',
+    'Dangerous network activity detected',
+    'Suspicious network activity detected',
+  ];
+
+  const protocol = protocols[Math.floor(Math.random() * protocols.length)];
+  const source = sources[Math.floor(Math.random() * sources.length)];
+  const destination = destinations[Math.floor(Math.random() * destinations.length)];
+  const length = Math.floor(Math.random() * 1500) + 40;
+  const description = attackDescriptions[Math.floor(Math.random() * attackDescriptions.length)];
+
+  return {
+    timestamp: new Date().toISOString(),
+    protocol,
+    source,
+    destination,
+    length,
+    description,
+  };
+}
+
+function logData(key, data) {
+  try {
+    const existing = JSON.parse(localStorage.getItem(key)) || [];
+    existing.push(data);
+    localStorage.setItem(key, JSON.stringify(existing));
+  } catch (e) {
+    console.error('Failed to log data', e);
+  }
+  console.log(key, data);
+}
+
+function App() {
+  const [networkData, setNetworkData] = useState([]);
+  const [attackSurfaceData, setAttackSurfaceData] = useState([]);
+  const [protocolData, setProtocolData] = useState([]);
+  const [scanSummary, setScanSummary] = useState(null);
+
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      const packet = generateRandomPacket();
+      logData('networkData', packet);
+      setNetworkData((prev) => {
+        const newData = [packet, ...prev].slice(0, 100);
+
+        // Prepare data for analysis
+        const analysisInput = newData.map((entry) => ({
+          protocol: entry.protocol,
+          description: entry.description || '',
+        }));
+
+        const { attackSurfaceCounts, protocolCounts } = analyzeNetworkData(analysisInput);
+
+        // Format data for recharts
+        const attackSurfaceArray = Object.entries(attackSurfaceCounts).map(([key, value]) => ({
+          name: key,
+          count: value,
+        }));
+
+        const protocolArray = Object.entries(protocolCounts).map(([key, value]) => ({
+          name: key,
+          count: value,
+        }));
+
+        setAttackSurfaceData(attackSurfaceArray);
+        setProtocolData(protocolArray);
+
+        return newData;
+      });
+    }, 1000);
+
+    const summaryIntervalId = setInterval(() => {
+      setScanSummary((prev) => {
+        if (networkData.length === 0) return prev;
+
+        // Generate summary from current networkData
+        const summary = {
+          totalPackets: networkData.length,
+          alerts: networkData.filter((pkt) => pkt.description && pkt.description.length > 0).length,
+          protocols: {},
+          sources: {},
+          destinations: {},
+        };
+
+        networkData.forEach((pkt) => {
+          summary.protocols[pkt.protocol] = (summary.protocols[pkt.protocol] || 0) + 1;
+          summary.sources[pkt.source] = (summary.sources[pkt.source] || 0) + 1;
+          summary.destinations[pkt.destination] = (summary.destinations[pkt.destination] || 0) + 1;
+        });
+
+        logData('scanSummary', summary);
+
+        return summary;
+      });
+    }, 30000);
+
+    return () => {
+      clearInterval(intervalId);
+      clearInterval(summaryIntervalId);
+    };
+  }, [networkData]);
+
+  return (
+    <div className="p-4">
+      <h1 className="text-3xl font-bold mb-6">Network Detector Standalone Web App</h1>
+
+      <div className="mb-8">
+        <h2 className="text-xl font-semibold mb-4">Attack Surface Analysis</h2>
+        {attackSurfaceData.length === 0 ? (
+          <p className="text-gray-500">No attack surface data available.</p>
+        ) : (
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart
+              data={attackSurfaceData}
+              margin={{
+                top: 5, right: 30, left: 20, bottom: 5,
+              }}
+            >
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="name" />
+              <YAxis allowDecimals={false} />
+              <Tooltip />
+              <Legend />
+              <Bar dataKey="count" fill="#8884d8" />
+            </BarChart>
+          </ResponsiveContainer>
+        )}
+      </div>
+
+      <div className="mb-8">
+        <h2 className="text-xl font-semibold mb-4">Protocol Analysis</h2>
+        {protocolData.length === 0 ? (
+          <p className="text-gray-500">No protocol data available.</p>
+        ) : (
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart
+              data={protocolData}
+              margin={{
+                top: 5, right: 30, left: 20, bottom: 5,
+              }}
+            >
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="name" />
+              <YAxis allowDecimals={false} />
+              <Tooltip />
+              <Legend />
+              <Bar dataKey="count" fill="#82ca9d" />
+            </BarChart>
+          </ResponsiveContainer>
+        )}
+      </div>
+
+      <div className="bg-white shadow rounded p-4 max-h-[400px] overflow-auto">
+        {networkData.length === 0 ? (
+          <p className="text-gray-500">No network data detected yet.</p>
+        ) : (
+          <table className="w-full table-auto border-collapse border border-gray-300">
+            <thead>
+              <tr className="bg-gray-200">
+                <th className="border border-gray-300 px-2 py-1 text-left">Timestamp</th>
+                <th className="border border-gray-300 px-2 py-1 text-left">Source IP</th>
+                <th className="border border-gray-300 px-2 py-1 text-left">Destination IP</th>
+                <th className="border border-gray-300 px-2 py-1 text-left">Protocol</th>
+                <th className="border border-gray-300 px-2 py-1 text-left">Length</th>
+              </tr>
+            </thead>
+            <tbody>
+              {networkData.map((entry, index) => (
+                <tr key={index} className="hover:bg-gray-100">
+                  <td className="border border-gray-300 px-2 py-1">{entry.timestamp}</td>
+                  <td className="border border-gray-300 px-2 py-1">{entry.source}</td>
+                  <td className="border border-gray-300 px-2 py-1">{entry.destination}</td>
+                  <td className="border border-gray-300 px-2 py-1">{entry.protocol}</td>
+                  <td className="border border-gray-300 px-2 py-1">{entry.length}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {scanSummary && (
+        <div className="bg-gray-100 rounded p-4 mt-6">
+          <h2 className="text-xl font-semibold mb-4">Scan Summary</h2>
+          <p>Total Packets: {scanSummary.totalPackets}</p>
+          <p>Alerts Detected: {scanSummary.alerts}</p>
+          <div className="grid grid-cols-3 gap-4 mt-4">
+            <div>
+              <h3 className="font-semibold">Protocols</h3>
+              <ul>
+                {Object.entries(scanSummary.protocols).map(([protocol, count]) => (
+                  <li key={protocol}>{protocol}: {count}</li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <h3 className="font-semibold">Sources</h3>
+              <ul>
+                {Object.entries(scanSummary.sources).map(([source, count]) => (
+                  <li key={source}>{source}: {count}</li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <h3 className="font-semibold">Destinations</h3>
+              <ul>
+                {Object.entries(scanSummary.destinations).map(([destination, count]) => (
+                  <li key={destination}>{destination}: {count}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+
+  </script>
+</body>
+</html>

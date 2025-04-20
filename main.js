@@ -1,47 +1,66 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+
+
 const path = require('path');
-const networkMonitor = require('./networkMonitor');
+const http = require('http');
+const express = require('express');
 
-let mainWindow;
+const ApiScanner = require('./apiScanner');
+const PcapScanner = require('./pcapScanner');
+const FfupScanner = require('./ffupScanner');
 
-function createWindow() {
-  mainWindow = new BrowserWindow({
-    width: 900,
-    height: 600,
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
+const SCANNER_TYPE = process.env.SCANNER_TYPE || 'api'; // 'pcap', 'ffup', or 'api'
+const apiUrl = 'https://example.com/api/network-data'; // Replace with actual API URL
+
+let scanner;
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+app.use(express.static(path.join(__dirname, 'renderer')));
+
+app.get('/api/scan-summary', (req, res) => {
+  res.json(latestSummary || {});
+});
+
+app.get('/api/network-data', (req, res) => {
+  res.json(latestData || {});
+});
+
+let latestSummary = null;
+let latestData = null;
+
+function startScanner() {
+  if (SCANNER_TYPE === 'pcap') {
+    scanner = new PcapScanner();
+  } else if (SCANNER_TYPE === 'ffup') {
+    scanner = new FfupScanner();
+  } else {
+    scanner = new ApiScanner(apiUrl);
+  }
+
+  scanner.start(
+    (data) => {
+      latestData = data;
+      console.log('Network Data:', data);
     },
-  });
-
-  mainWindow.loadFile('renderer/index.html');
-
-  mainWindow.on('closed', () => {
-    mainWindow = null;
-  });
+    (summary) => {
+      latestSummary = summary;
+      console.log('Scan Summary:', summary);
+    }
+  );
 }
 
-app.whenReady().then(() => {
-  createWindow();
-
-  // Start network monitoring and send data to renderer
-  networkMonitor.start((data) => {
-    if (mainWindow) {
-      mainWindow.webContents.send('network-data', data);
-    }
-  });
-
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
-  });
+app.listen(PORT, () => {
+  console.log(`Server running at http://localhost:${PORT}`);
+  startScanner();
 });
 
-app.on('window-all-closed', () => {
-  networkMonitor.stop();
-  if (process.platform !== 'darwin') {
-    app.quit();
+process.on('SIGINT', () => {
+  console.log('Stopping scanner...');
+  if (scanner) {
+    scanner.stop();
   }
+  process.exit();
 });
 
-// IPC handlers if needed can be added here
+

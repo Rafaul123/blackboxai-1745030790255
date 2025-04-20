@@ -1,0 +1,13 @@
+{
+  "name": "network-detector-simulated",
+  "version": "1.0.0",
+  "description": "Electron app with simulated network data and scan summary",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^25.0.0"
+  },
+  "dependencies": {}
+}
